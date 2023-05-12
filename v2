@@ -1,0 +1,68 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+int main() {
+    int n_rows, n_cols, n_threads;
+    printf("Input the number rows: ");
+    scanf("%d", &n_rows);
+    printf("Input the number of columns: ");
+    scanf("%d", &n_cols);
+    printf("Input the number of threads: ");
+    scanf("%d", &n_threads);
+
+    double **matrix = (double **) malloc(n_rows * sizeof(double *));
+    for (int i = 0; i < n_rows; i++) {
+        matrix[i] = (double *) malloc(n_cols * sizeof(double));
+        for (int j = 0; j < n_cols; j++) {
+            scanf("%lf", &matrix[i][j]);
+        }
+    }
+
+    double *solution = (double *) malloc(n_rows * sizeof(double));
+    double start_time = omp_get_wtime();
+    #pragma omp parallel num_threads(n_threads)
+    {
+        for (int k = 0; k < n_rows - 1; k++) {
+            #pragma omp single
+            {
+                printf("Iteration %d\n", k + 1);
+            }
+            #pragma omp for
+            for (int i = k + 1; i < n_rows; i++) {
+                double factor = matrix[i][k] / matrix[k][k];
+                #pragma omp critical
+                {
+                    printf("Thread %d: Row %d -= Row %d * %lf\n", omp_get_thread_num(), i, k, factor);
+                    for (int j = k; j < n_cols; j++) {
+                        matrix[i][j] -= matrix[k][j] * factor;
+                    }
+                }
+            }
+            #pragma omp barrier
+        }
+        #pragma omp single
+        {
+            for (int i = n_rows - 1; i >= 0; i--) {
+                double sum = 0.0;
+                for (int j = i + 1; j < n_rows; j++) {
+                    sum += matrix[i][j] * solution[j];
+                }
+                solution[i] = (matrix[i][n_cols - 1] - sum) / matrix[i][i];
+            }
+        }
+    }
+    double end_time = omp_get_wtime();
+    printf("Solution:\n");
+    for (int i = 0; i < n_rows; i++) {
+        printf("%lf ", solution[i]);
+    }
+    printf("\n");
+    printf("Elapsed time: %lf seconds\n", end_time - start_time);
+    for (int i = 0; i < n_rows; i++) {
+        free(matrix[i]);
+    }
+    free(matrix);
+    free(solution);
+    return 0;
+}

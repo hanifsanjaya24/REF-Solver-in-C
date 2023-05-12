@@ -2,79 +2,104 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#define MAX_THREADS 32
+void print_matrix(int n_rows, int n_cols, double** matrix) {
+    for (int i = 0; i < n_rows; i++) {
+        for (int j = 0; j < n_cols; j++) {
+            printf("%lf ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+}
 
 int main() {
     int n_rows, n_cols, n_threads;
-    printf("Enter the number of rows, columns, and threads: ");
-    scanf("%d %d %d", &n_rows, &n_cols, &n_threads);
-    if (n_threads > 2 * omp_get_num_procs()) {
-        printf("Warning: Number of threads is greater than logical processors.\n");
-    }
-    double **matrix = (double **)malloc(n_rows * sizeof(double *));
+    printf("Input the number of rows: ");
+    scanf("%d", &n_rows);
+    printf("Input the number of columns: ");
+    scanf("%d", &n_cols);
+    printf("Input the number of threads: ");
+    scanf("%d", &n_threads);
+    double** matrix = (double**) malloc(n_rows * sizeof(double*));
     for (int i = 0; i < n_rows; i++) {
-        matrix[i] = (double *)malloc(n_cols * sizeof(double));
-        printf("Enter the elements of row %d: ", i+1);
+        matrix[i] = (double*) malloc(n_cols * sizeof(double));
+    }
+    printf("Input matrix:\n");
+    for (int i = 0; i < n_rows; i++) {
         for (int j = 0; j < n_cols; j++) {
             scanf("%lf", &matrix[i][j]);
         }
     }
-    double *solution = (double *)calloc(n_rows, sizeof(double));
-    int pivot;
-    double factor;
+    printf("\n");
+    printf("Original matrix:\n");
+    print_matrix(n_rows, n_cols, matrix);
+    printf("\n");
+    double* solution = (double*) malloc(n_rows * sizeof(double));
+    for (int i = 0; i < n_rows; i++) {
+        solution[i] = 0.0;
+    }
     double start_time = omp_get_wtime();
     #pragma omp parallel num_threads(n_threads)
     {
-        int tid = omp_get_thread_num();
-        for (int i = 0; i < n_rows-1; i++) {
-            if (i % n_threads == tid) {
-                pivot = i;
-                for (int j = i+1; j < n_rows; j++) {
-                    if (abs(matrix[j][i]) > abs(matrix[pivot][i])) {
-                        pivot = j;
+        for (int k = 0; k < n_rows - 1; k++) {
+            if (matrix[k][k] == 0.0) {
+                int pivot_row = k;
+                double max_val = matrix[k][k];
+                for (int i = k + 1; i < n_rows; i++) {
+                    if (abs(matrix[i][k]) > abs(max_val)) {
+                        pivot_row = i;
+                        max_val = matrix[i][k];
                     }
                 }
-                if (pivot != i) {
-                    printf("Thread %d: Swapping rows %d and %d\n", tid, i+1, pivot+1);
-                    double *temp = matrix[i];
-                    matrix[i] = matrix[pivot];
-                    matrix[pivot] = temp;
-                }
-                for (int j = i+1; j < n_rows; j++) {
-                    factor = matrix[j][i] / matrix[i][i];
-                    printf("Thread %d: Multiplying row %d by %lf\n", tid, j+1, factor);
-                    for (int k = i; k < n_cols; k++) {
-                        matrix[j][k] -= factor * matrix[i][k];
+                #pragma omp critical
+                {
+                    printf("Swapping M[%d][%d] with M[%d][%d] using thread %d\n", pivot_row, k, k, k, omp_get_thread_num());
+                    for (int j = 0; j < n_cols; j++) {
+                        double temp = matrix[pivot_row][j];
+                        matrix[pivot_row][j] = matrix[k][j];
+                        matrix[k][j] = temp;
                     }
                 }
             }
-            #pragma omp barrier
+        #pragma omp barrier
+        #pragma omp for
+        for (int i = k + 1; i < n_rows; i++) {
+            if (matrix[i][k] != 0.0) {
+                double factor = matrix[i][k] / matrix[k][k];
+                printf("Performing line multiplication M[%d][%d] with factor %lf using thread %d\n", i, k, factor, omp_get_thread_num());
+                for (int j = k; j < n_cols; j++) {
+                    matrix[i][j] -= factor * matrix[k][j];
+                }
+            }
         }
         #pragma omp barrier
-        for (int i = n_rows-1; i >= 0; i--) {
-            if (i % n_threads == tid) {
-                for (int j = i+1; j < n_rows; j++) {
-                    solution[i] -= matrix[i][j] * solution[j];
-                }
-                solution[i] += matrix[i][n_cols-1];
-                solution[i] /= matrix[i][i];
-                printf("Thread %d: Solving for variable %d with value %lf\n", tid, i+1, solution[i]);
-            }
-            #pragma omp barrier
-        }
-        double end_time = omp_get_wtime();
-        printf("Solution vector:\n");
-        for (int i = 0; i < n_rows; i++) {
-            printf("%lf ", solution[i]);
-        }
-        printf("\n");
-        printf("Execution time: %lf seconds\n", end_time - start_time);
-        for (int i = 0; i < n_rows; i++) {
-            free(matrix[i]);
-        }
-        free(matrix);
-        free(solution);
-
     }
-            return 0;
+    #pragma omp single
+    {
+        if (matrix[n_rows - 1][n_rows - 1] == 0.0) {
+            printf("No unique solution exists\n");
+        } else {
+            solution[n_rows - 1] = matrix[n_rows - 1][n_cols - 1] / matrix[n_rows - 1][n_rows - 1];
+            for (int i = n_rows - 2; i >= 0; i--) {
+                double sum = matrix[i][n_cols - 1];
+                for (int j = i + 1; j < n_rows; j++) {
+                    sum -= matrix[i][j] * solution[j];
+                }
+                solution[i] = sum / matrix[i][i];
+            }
+            printf("Solution:\n");
+            for (int i = 0; i < n_rows; i++) {
+                printf("%lf\n", solution[i]);
+            }
+        }
+    }
+}
+    double end_time = omp_get_wtime();
+    printf("\n");
+    printf("Elapsed time: %lf seconds\n", end_time - start_time);
+    for (int i = 0; i < n_rows; i++) {
+        free(matrix[i]);
+    }
+    free(matrix);
+    free(solution);
+return 0;                  
 }

@@ -1,0 +1,91 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+void print_matrix(int rows, int cols, double matrix[rows][cols]) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            printf("%.2f ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+int main() {
+    int rows, cols, threads;
+    printf("Input the number of rows: ");
+    scanf("%d", &rows);
+    printf("Input the number of columns: ");
+    scanf("%d", &cols);
+    printf("Input the number of threads: ");
+    scanf("%d", &threads);
+
+    double matrix[rows][cols];
+
+    printf("Input matrix:\n");
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            scanf("%lf", &matrix[i][j]);
+        }
+    }
+    printf("\nInitial matrix:\n");
+    print_matrix(rows, cols, matrix);
+
+    for (int i = 0; i < rows; i++) {
+        #pragma omp parallel num_threads(threads)
+        {
+            int tid = omp_get_thread_num();
+
+            // Step 1: Find row with the largest first element
+            int max_row = i;
+            #pragma omp for
+            for (int j = i + 1; j < rows; j++) {
+                if (abs(matrix[j][i]) > abs(matrix[max_row][i])) {
+                    max_row = j;
+                }
+            }
+
+            // Step 2: Swap rows if necessary
+            if (max_row != i) {
+                #pragma omp critical
+                {
+                    printf("Swapping row %d with row %d using thread %d\n", i, max_row, tid);
+                }
+                #pragma omp for
+                for (int k = i; k < cols; k++) {
+                    double temp = matrix[i][k];
+                    matrix[i][k] = matrix[max_row][k];
+                    matrix[max_row][k] = temp;
+                }
+                #pragma omp critical
+                {
+                    print_matrix(rows, cols, matrix);
+                }
+            }
+
+            // Step 3: Perform elimination
+            #pragma omp for
+            for (int j = i + 1; j < rows; j++) {
+                double factor = matrix[j][i] / matrix[i][i];
+                #pragma omp critical
+                {
+                    printf("Dividing row %d by %.2f using thread %d\n", j, factor, tid);
+                }
+                for (int k = i; k < cols; k++) {
+                    matrix[j][k] -= matrix[i][k] * factor;
+                }
+                #pragma omp critical
+                {
+                    printf("Subtracting row %d from row %d using thread %d\n", i, j, tid);
+                    print_matrix(rows, cols, matrix);
+                }
+            }
+        }
+    }
+
+    printf("Final matrix:\n");
+    print_matrix(rows, cols, matrix);
+
+    return 0;
+}

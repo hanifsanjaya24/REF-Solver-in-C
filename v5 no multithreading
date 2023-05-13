@@ -1,0 +1,118 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+void print_matrix(int rows, int cols, double matrix[rows][cols]) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            printf("%.2f ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+int main() {
+    int rows, cols, threads;
+    printf("Input the number of rows: ");
+    scanf("%d", &rows);
+    printf("Input the number of columns: ");
+    scanf("%d", &cols);
+    printf("Input the number of threads: ");
+    scanf("%d", &threads);
+
+    double matrix[rows][cols];
+
+    printf("Input matrix:\n");
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            scanf("%lf", &matrix[i][j]);
+        }
+    }
+    printf("\nInitial matrix:\n");
+    print_matrix(rows, cols, matrix);
+
+    for (int i = 0; i < rows; i++) {
+        int max_row = i;
+        for (int j = i + 1; j < rows; j++) {
+            if (abs(matrix[j][i]) > abs(matrix[max_row][i])) {
+                max_row = j;
+            }
+        }
+
+        if (max_row != i) {
+            printf("Swapping row %d with row %d\n", i, max_row);
+            for (int k = i; k < cols; k++) {
+                double temp = matrix[i][k];
+                matrix[i][k] = matrix[max_row][k];
+                matrix[max_row][k] = temp;
+            }
+            print_matrix(rows, cols, matrix);
+        }
+        if (matrix[i][i] == 0) {
+            printf("No unique solution exists.\n");
+            return 0;
+        }
+        double factor = matrix[i][i];
+        for (int j = i; j < cols; j++) {
+            printf("M[%d][%d] /= %lf\n", i, j, factor);
+            matrix[i][j] /= factor;
+        }
+        print_matrix(rows, cols, matrix);
+        for (int j = i + 1; j < rows; j++) {
+            factor = matrix[j][i];
+            for (int k = i; k < cols; k++) {
+                printf("M[%d][%d] -= %lf * matrix[%d][%d]\n", j, k, factor, i, k);
+                matrix[j][k] -= factor * matrix[i][k];
+            }
+        }
+        print_matrix(rows, cols, matrix);
+    }
+
+    // Make diagonal elements 1 and move 1s to the right
+    for (int i = 0; i < rows; i++) {
+        int pivot = -1;
+        for (int j = 0; j < cols; j++) {
+            if (matrix[i][j] == 1) {
+                pivot = j;
+                break;
+            }
+        }
+        if (pivot == -1) {
+            continue;
+        }
+        for (int j = 0; j < rows; j++) {
+            if (j != i && matrix[j][pivot] != 0) {
+                double factor = matrix[j][pivot];
+                for (int k = pivot; k < cols; k++) {
+                    matrix[j][k] -= factor * matrix[i][k];
+                    printf("M[%d][%d] -= %lf * M[%d][%d]\n", j, k, factor, i, k);
+                }
+            print_matrix(rows, cols, matrix);
+            }
+        }
+        print_matrix(rows, cols, matrix);
+        // Swap columns if necessary
+        if (pivot != i && pivot < cols - 1) {
+            printf("Swapping column %d with column %d\n", pivot, cols - 1);
+            for (int j = 0; j < rows; j++) {
+                double temp = matrix[i][pivot];
+                matrix[i][pivot] = matrix[j][cols - 1];
+                matrix[j][cols - 1] = temp;
+            }
+            print_matrix(rows, cols, matrix);
+            pivot = cols - 1;
+        }
+            // Move 1 to the right
+            for (int j = pivot + 1; j < cols; j++) {
+            printf("matrix[%d][%d] /= matrix[%d][%d]\n", i, j, i, pivot);
+            matrix[i][j] /= matrix[i][pivot];
+            }
+            print_matrix(rows, cols, matrix);
+            matrix[i][pivot] = 1;
+            }
+            printf("\nFinal matrix:\n");
+            print_matrix(rows, cols, matrix);
+
+            return 0;
+}

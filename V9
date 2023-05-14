@@ -1,0 +1,153 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+void print_matrix(int rows, int cols, double matrix[rows][cols]);
+
+int main() {
+    int rows, cols, threads;
+    printf("Input jumlah baris: ");
+    scanf("%d", &rows);
+    printf("Input jumlah kolom: ");
+    scanf("%d", &cols);
+    printf("Input jumlah thread: ");
+    scanf("%d", &threads);
+    if (threads > 2 * omp_get_num_procs()) {
+        printf("Warning: Jumlah dari thread lebih besar daripada logical processor.\n");
+    }
+
+    double matrix[rows][cols];
+
+    printf("Input matrix:\n");
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            scanf("%lf", &matrix[i][j]);
+        }
+    }
+    printf("\nMatrix awal:\n");
+    print_matrix(rows, cols, matrix);
+
+    omp_set_num_threads(threads);
+
+    #pragma omp parallel
+    {
+        int thread_id = omp_get_thread_num();
+        //Iterasi pertama
+        for (int i = 0; i < rows; i++) {
+            int max_row = i;
+            //Mencari baris dengan nilai maks
+            for (int j = i + 1; j < rows; j++) {
+                if (abs(matrix[j][i]) > abs(matrix[max_row][i])) {
+                    max_row = j;
+                }
+            }
+
+            #pragma omp barrier
+
+            if (max_row != i) {
+                #pragma omp critical
+                {
+                    //Menukar dengan baris yang memiliki nilai maks
+                    printf("Thread %d menukar baris %d dengan baris %d\n", thread_id, i, max_row);
+                    for (int k = i; k < cols; k++) {
+                        double temp = matrix[i][k];
+                        matrix[i][k] = matrix[max_row][k];
+                        matrix[max_row][k] = temp;
+                    }
+                    print_matrix(rows, cols, matrix);
+                }
+            }
+
+            #pragma omp barrier
+
+            if (matrix[i][i] == 0) {
+                #pragma omp master
+                {
+                    printf("Tidak ada solusi khusus.\n");
+                }
+                break;
+            }
+            //Melakukan operasi baris elementer
+            double factor = matrix[i][i];
+            #pragma omp for
+            for (int j = i; j < cols; j++) {
+                printf("Thread %d M[%d][%d] /= %lf\n", thread_id, i, j, factor);
+                matrix[i][j] /= factor;
+            }
+            #pragma omp barrier
+            print_matrix(rows, cols, matrix);
+            #pragma omp for
+            for (int j = i + 1; j < rows; j++) {
+                factor = matrix[j][i];
+                for (int k = i; k < cols; k++) {
+                    printf("Thread %d: M[%d][%d] -= %lf * matrix[%d][%d]\n", thread_id, j, k, factor, i, k);
+                    matrix[j][k] -= factor * matrix[i][k];
+                }
+            }
+            #pragma omp barrier
+            print_matrix(rows, cols, matrix);
+        }
+
+        #pragma omp barrier
+        //Iterasi kedua
+        for (int i = 0; i < rows; i++) {
+            int pivot = -1;
+            for (int j = 0; j < cols; j++) {
+                if (matrix[i][j] == 1) {
+                    pivot = j;
+					break;
+				}
+			}
+            if (pivot == -1) {
+                continue;
+            }
+            #pragma omp barrier
+            #pragma omp for
+            for (int j = 0; j < rows; j++) {
+                if (j != i && matrix[j][pivot] != 0) {
+                    double factor = matrix[j][pivot];
+                    for (int k = pivot; k < cols; k++) {
+                        matrix[j][k] -= factor * matrix[i][k];
+                        printf("Thread %d: M[%d][%d] -= %lf * M[%d][%d]\n", thread_id, j, k, factor, i, k);
+                    }
+                    print_matrix(rows, cols, matrix);
+                }
+            }
+            #pragma omp barrier
+            print_matrix(rows, cols, matrix);
+            // Menukar kolom
+            #pragma omp barrier
+            if (pivot != i && pivot < cols - 1) {
+                printf("Thread %d: Menukar kolom %d dengan kolom %d\n", thread_id, pivot, cols - 1);
+                for (int j = 0; j < rows; j++) {
+                    double temp = matrix[i][pivot];
+                    matrix[i][pivot] = matrix[j][cols - 1];
+                    matrix[j][cols - 1] = temp;
+                }
+                print_matrix(rows, cols, matrix);
+                pivot = cols - 1;
+            }
+            //Pindah 1 ke kanan
+            #pragma omp for
+            for (int j = pivot + 1; j < cols; j++) {
+                printf("Thread %d: Matrix[%d][%d] /= matrix[%d][%d]\n", thread_id, i, j, i, pivot);
+                matrix[i][j] /= matrix[i][pivot];
+            }
+            #pragma omp barrier
+            print_matrix(rows, cols, matrix);
+            matrix[i][pivot] = 1;
+        }
+    }
+    printf("\nMatriks REF:\n");
+    print_matrix(rows, cols, matrix);
+}
+
+void print_matrix(int rows, int cols, double matrix[rows][cols]) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            printf("%.2f ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
